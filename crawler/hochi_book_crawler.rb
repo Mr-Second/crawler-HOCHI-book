@@ -64,7 +64,7 @@ class HochiBookCrawler
     @detail_links.each_with_index do |url, i|
       sleep(1) until (
         @threads.delete_if { |t| !t.status };  # remove dead (ended) threads
-        @threads.count < (ENV['MAX_THREADS'] || 25)
+        @threads.count < (ENV['MAX_THREADS'] || 20)
       )
       @threads << Thread.new do
         r = RestClient.get url
@@ -113,7 +113,7 @@ class HochiBookCrawler
           url: url
         }
 
-        print "#{i} / #{@detail_links.count}\n"
+        print "#{i+1} / #{@detail_links.count}\n"
       end # Thread new do
     end # end each urls
 
@@ -123,6 +123,7 @@ class HochiBookCrawler
 
   def find_split str
       ['/', '／', '／'].each { |sp| return sp if str.include?(sp) }
+      return nil
   end
 
 end
