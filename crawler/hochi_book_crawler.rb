@@ -2,6 +2,7 @@ require 'crawler_rocks'
 require 'pry'
 require 'json'
 require 'iconv'
+require 'book_toolkit'
 
 require 'thread'
 require 'thwait'
@@ -9,7 +10,10 @@ require 'thwait'
 class HochiBookCrawler
   include CrawlerRocks::DSL
 
-  def initialize
+  def initialize update_progress: nil, after_each: nil
+    @update_progress_proc = update_progress
+    @after_each_proc = after_each
+
     @base_url = "http://hochitw.com"
     @index_url = "http://hochitw.com/index_down.php"
   end
@@ -73,13 +77,13 @@ class HochiBookCrawler
         table_selector = '//table[@cellpadding="1"][@cellspacing="0"][@width="100%"][@border="0"][@bgcolor="#DFEFFF"][@bordercolor="#ffffff"]'
         name = doc.xpath(table_selector + '/tr[1]').text
 
-        internal_code = nil; price = nil; isbn = nil; barcode = nil;
+        internal_code = nil; original_price = nil; isbn = nil; barcode = nil;
         author = nil; publisher = nil;
         doc.xpath(table_selector + '/td').each do |td|
           datas = td.css('td')
 
           internal_code ||= datas[1].text if datas[0].text == '編號'
-          price ||= datas[1].text.gsub(/[^\d]/, '').to_i if datas[0].text == '定價'
+          original_price ||= datas[1].text.gsub(/[^\d]/, '').to_i if datas[0].text == '定價'
 
           if datas[0].text == 'ISBN/條碼'
             _split = find_split(datas[1].text)
@@ -101,19 +105,31 @@ class HochiBookCrawler
 
         external_image_url = URI.join(@index_url, doc.css('#p1p img')[0]["src"] ).to_s unless doc.css('#p1p img').empty?
 
-        @books << {
+        isbn = isbn || barcode; invalid_isbn = nil;
+        begin
+          isbn = BookToolkit.to_isbn13(isbn)
+        rescue Exception => e
+          invalid_isbn = isbn
+          isbn = nil
+        end
+
+        book = {
           name: name,
           isbn: isbn,
+          invalid_isbn: invalid_isbn,
           barcode: barcode,
           author: author,
           publisher: publisher,
-          price: price,
+          original_price: original_price,
           internal_code: internal_code,
           external_image_url: external_image_url,
-          url: url
+          url: url,
+          known_supplier: 'hochi'
         }
+        @after_each_proc.call(book: book) if @after_each_proc
 
-        print "#{i+1} / #{@detail_links.count}\n"
+        @books << book
+        # print "#{i+1} / #{@detail_links.count}\n"
       end # Thread new do
     end # end each urls
 
@@ -128,5 +144,5 @@ class HochiBookCrawler
 
 end
 
-cc = HochiBookCrawler.new
-File.write('hochi_books.json', JSON.pretty_generate(cc.books))
+# cc = HochiBookCrawler.new
+# File.write('hochi_books.json', JSON.pretty_generate(cc.books))
